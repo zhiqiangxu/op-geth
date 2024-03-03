@@ -22,6 +22,8 @@ import (
 	"math"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/util"
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -221,6 +223,7 @@ type StateTransition struct {
 	initialGas   uint64
 	state        vm.StateDB
 	evm          *vm.EVM
+	gasFromSoul  bool
 }
 
 // NewStateTransition initialises and returns a new state transition object.
@@ -239,6 +242,120 @@ func (st *StateTransition) to() common.Address {
 		return common.Address{}
 	}
 	return *st.msg.To
+}
+
+var SoulETHABI abi.ABI
+
+func init() {
+	var err error
+	SoulETHABI, err = util.ParseFunctionsAsABI([]string{
+		"function balanceOf(address account) returns (uint256)",
+		"function burnFrom(address account, uint256 value)",
+		"function batchMint(address[] accounts, uint256[] values)"})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func getSoulBalanceData(account common.Address) []byte {
+	method, ok := SoulETHABI.Methods["balanceOf"]
+	if !ok {
+		panic("balanceOf method not found")
+	}
+
+	argument, err := method.Inputs.Pack(account)
+	if err != nil {
+		panic("failed to pack argument")
+	}
+
+	data := make([]byte, len(method.ID)+len(argument))
+	copy(data[0:len(method.ID)], method.ID)
+	copy(data[len(method.ID):], argument)
+	return data
+}
+
+func parseSoulBalanceResp(ret []byte) (*big.Int, error) {
+	method, ok := SoulETHABI.Methods["balanceOf"]
+	if !ok {
+		panic("balanceOf method not found")
+	}
+
+	returnValueInterface, err := method.Outputs.Unpack(ret)
+	if err != nil {
+		return nil, fmt.Errorf("parseSoulBalanceResp Unpack failed:%w", err)
+	}
+
+	returnValue := new(big.Int)
+	err = method.Outputs.Copy(returnValue, returnValueInterface)
+	if err != nil {
+		return nil, fmt.Errorf("parseSoulBalanceResp Copy failed:%w", err)
+	}
+	return new(big.Int), nil
+}
+
+func burnSoulBalanceData(account common.Address, amount *big.Int) []byte {
+
+	method, ok := SoulETHABI.Methods["burnFrom"]
+	if !ok {
+		panic("burnFrom method not found")
+	}
+
+	argument, err := method.Inputs.Pack(account, amount)
+	if err != nil {
+		panic("failed to pack argument")
+	}
+
+	data := make([]byte, len(method.ID)+len(argument))
+	copy(data[0:len(method.ID)], method.ID)
+	copy(data[len(method.ID):], argument)
+	return data
+}
+
+// MintSoulBalanceData is exported for reusing in op_geth_test.go
+func MintSoulBalanceData(account common.Address, amount *big.Int) []byte {
+	method, ok := SoulETHABI.Methods["batchMint"]
+	if !ok {
+		panic("batchMint method not found")
+	}
+
+	argument, err := method.Inputs.Pack([]common.Address{account}, []*big.Int{amount})
+	if err != nil {
+		panic("failed to pack argument")
+	}
+
+	data := make([]byte, len(method.ID)+len(argument))
+	copy(data[0:len(method.ID)], method.ID)
+	copy(data[len(method.ID):], argument)
+	return data
+}
+
+var (
+	callSoulGasLimit = uint64(8_000_000)
+	SoulBurner       = common.HexToAddress("0x01")
+	SoulMinter       = common.HexToAddress("0x02")
+)
+
+func (st *StateTransition) GetSoulBalance(account common.Address) (*big.Int, error) {
+	// this evm call is free of gas charging
+	ret, _, vmerr := st.evm.Call(vm.AccountRef(account), types.SoulETHAddr, getSoulBalanceData(account), callSoulGasLimit, common.Big0)
+	if vmerr != nil {
+		return nil, vmerr
+	}
+	return parseSoulBalanceResp(ret)
+}
+
+func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.Int) (err error) {
+	_, _, err = st.evm.Call(vm.AccountRef(SoulBurner), types.SoulETHAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.Big0)
+	return
+}
+
+func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.Int) {
+
+	_, _, err := st.evm.Call(vm.AccountRef(SoulMinter), types.SoulETHAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.Big0)
+
+	if err != nil {
+		panic(fmt.Sprintf("mint should never fail:%v", err))
+	}
 }
 
 func (st *StateTransition) buyGas() error {
@@ -272,7 +389,18 @@ func (st *StateTransition) buyGas() error {
 			mgval.Add(mgval, blobFee)
 		}
 	}
-	if have, want := st.state.GetBalance(st.msg.From), balanceCheck; have.Cmp(want) < 0 {
+
+	st.gasFromSoul = false
+	have, err := st.GetSoulBalance(st.msg.From)
+	if err != nil {
+		return fmt.Errorf("GetSoulBalance error:%v", err)
+	}
+	if have, want := have, new(big.Int).Sub(balanceCheck, st.msg.Value); have.Cmp(want) >= 0 {
+		if have, want := st.state.GetBalance(st.msg.From), st.msg.Value; have.Cmp(want) < 0 {
+			return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
+		}
+		st.gasFromSoul = true
+	} else if have, want := st.state.GetBalance(st.msg.From), balanceCheck; have.Cmp(want) < 0 {
 		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
 	}
 	if err := st.gp.SubGas(st.msg.GasLimit); err != nil {
@@ -281,7 +409,12 @@ func (st *StateTransition) buyGas() error {
 	st.gasRemaining += st.msg.GasLimit
 
 	st.initialGas = st.msg.GasLimit
-	st.state.SubBalance(st.msg.From, mgval)
+	if st.gasFromSoul {
+		return st.SubSoulBalance(st.msg.From, mgval)
+	} else {
+		st.state.SubBalance(st.msg.From, mgval)
+	}
+
 	return nil
 }
 
@@ -537,15 +670,27 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	} else {
 		fee := new(big.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTip)
-		st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		if st.gasFromSoul {
+			st.AddSoulBalance(st.evm.Context.Coinbase, fee)
+		} else {
+			st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		}
 	}
 
 	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
 	// Note optimismConfig will not be nil if rules.IsOptimismBedrock is true
 	if optimismConfig := st.evm.ChainConfig().Optimism; optimismConfig != nil && rules.IsOptimismBedrock && !st.msg.IsDepositTx {
-		st.state.AddBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		if st.gasFromSoul {
+			st.AddSoulBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		} else {
+			st.state.AddBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		}
 		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
-			st.state.AddBalance(params.OptimismL1FeeRecipient, cost)
+			if st.gasFromSoul {
+				st.AddSoulBalance(params.OptimismL1FeeRecipient, cost)
+			} else {
+				st.state.AddBalance(params.OptimismL1FeeRecipient, cost)
+			}
 		}
 	}
 
@@ -567,7 +712,11 @@ func (st *StateTransition) refundGas(refundQuotient uint64) uint64 {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gasRemaining), st.msg.GasPrice)
-	st.state.AddBalance(st.msg.From, remaining)
+	if st.gasFromSoul {
+		st.AddSoulBalance(st.msg.From, remaining)
+	} else {
+		st.state.AddBalance(st.msg.From, remaining)
+	}
 
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
