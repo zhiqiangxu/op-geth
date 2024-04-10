@@ -230,6 +230,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		overrides.OverrideOptimismInterop = config.OverrideOptimismInterop
 	}
 	overrides.ApplySuperchainUpgrades = config.ApplySuperchainUpgrades
+	overrides.Enable4844ForOptimism = config.Enable4844ForOptimism
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err
@@ -256,7 +257,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
 
 	txPools := []txpool.SubPool{legacyPool}
-	if true || !eth.BlockChain().Config().IsOptimism() {
+	if !eth.BlockChain().Config().IsOptimism() || eth.BlockChain().Config().Optimism.Enable4844 {
 		blobPool := blobpool.New(config.BlobPool, eth.blockchain)
 		txPools = append(txPools, blobPool)
 	}

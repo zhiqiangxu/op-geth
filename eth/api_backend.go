@@ -293,7 +293,7 @@ func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscri
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-	if false && b.ChainConfig().IsOptimism() && signedTx.Type() == types.BlobTxType {
+	if b.ChainConfig().IsOptimism() && !b.ChainConfig().Optimism.Enable4844 && signedTx.Type() == types.BlobTxType {
 		return types.ErrTxTypeNotSupported
 	}
 	if b.eth.seqRPCService != nil {

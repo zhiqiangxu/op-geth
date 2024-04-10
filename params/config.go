@@ -403,6 +403,7 @@ type OptimismConfig struct {
 	EIP1559Elasticity        uint64 `json:"eip1559Elasticity"`
 	EIP1559Denominator       uint64 `json:"eip1559Denominator"`
 	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+	Enable4844               bool   `json:"enable4844"`
 }
 
 // String implements the stringer interface, returning the optimism fee config details.

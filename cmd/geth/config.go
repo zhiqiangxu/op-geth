@@ -194,6 +194,8 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		cfg.Eth.OverrideVerkle = &v
 	}
 
+	cfg.Eth.Enable4844ForOptimism = ctx.Bool(utils.Enable4844.Name)
+
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Create gauge with geth system and build information
