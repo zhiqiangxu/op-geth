@@ -194,7 +194,7 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 		cfg.Eth.OverrideVerkle = &v
 	}
 
-	cfg.Eth.Enable4844ForOptimism = ctx.Bool(utils.Enable4844.Name)
+	cfg.Eth.EnableL2Blob = ctx.Bool(utils.EnableL2Blob.Name)
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 

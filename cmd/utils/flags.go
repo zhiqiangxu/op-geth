@@ -276,9 +276,9 @@ var (
 		Usage:    "Manually specify the Optimsim Interop feature-set fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
-	Enable4844 = &cli.BoolFlag{
-		Name:     "enable4844",
-		Usage:    "Manually enable 4844 for optimism",
+	EnableL2Blob = &cli.BoolFlag{
+		Name:     "enablel2blob",
+		Usage:    "Manually enable l2 blob for optimism",
 		Category: flags.EthCategory,
 	}
 	SyncModeFlag = &flags.TextMarshalerFlag{

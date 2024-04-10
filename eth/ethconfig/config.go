@@ -167,7 +167,7 @@ type Config struct {
 
 	OverrideOptimismInterop *uint64 `toml:",omitempty"`
 
-	Enable4844ForOptimism bool
+	EnableL2Blob bool
 
 	// ApplySuperchainUpgrades requests the node to load chain-configuration from the superchain-registry.
 	ApplySuperchainUpgrades bool `toml:",omitempty"`
