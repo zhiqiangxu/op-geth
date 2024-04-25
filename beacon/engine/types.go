@@ -231,6 +231,7 @@ func ExecutableDataToBlock(params ExecutableData, versionedHashes []common.Hash,
 	for _, tx := range txs {
 		blobHashes = append(blobHashes, tx.BlobHashes()...)
 	}
+	versionedHashes = blobHashes
 	if len(blobHashes) != len(versionedHashes) {
 		return nil, fmt.Errorf("invalid number of versionedHashes: %v blobHashes: %v", versionedHashes, blobHashes)
 	}
