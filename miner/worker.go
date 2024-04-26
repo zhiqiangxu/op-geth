@@ -808,11 +808,12 @@ func (w *worker) commitBlobTransaction(env *environment, tx *types.Transaction) 
 	if (env.blobs+len(sc.Blobs))*params.BlobTxBlobGasPerBlob > params.MaxBlobGasPerBlock {
 		return nil, errors.New("max data blobs reached")
 	}
-	receipt, err := w.applyTransaction(env, tx)
+	txWithoutBlob := tx.WithoutBlobTxSidecar()
+	receipt, err := w.applyTransaction(env, txWithoutBlob)
 	if err != nil {
 		return nil, err
 	}
-	env.txs = append(env.txs, tx.WithoutBlobTxSidecar())
+	env.txs = append(env.txs, txWithoutBlob)
 	env.receipts = append(env.receipts, receipt)
 	env.sidecars = append(env.sidecars, sc)
 	env.blobs += len(sc.Blobs)
