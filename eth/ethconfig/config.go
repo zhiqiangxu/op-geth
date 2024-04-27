@@ -167,6 +167,7 @@ type Config struct {
 
 	OverrideOptimismInterop *uint64 `toml:",omitempty"`
 
+	// Enable accepting EIP-4844 BLOBs on L2
 	EnableL2Blob bool
 
 	// ApplySuperchainUpgrades requests the node to load chain-configuration from the superchain-registry.
