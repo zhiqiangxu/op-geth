@@ -79,7 +79,7 @@ var (
 // RollupCostData is a transaction structure that caches data for quickly computing the data
 // availablility costs for the transaction.
 type RollupCostData struct {
-	zeroes, ones uint64
+	zeroes, ones, blobs uint64
 }
 
 type StateGetter interface {
@@ -94,7 +94,7 @@ type L1CostFunc func(rcd RollupCostData, blockTime uint64) *big.Int
 // receipts.
 type l1CostFunc func(rcd RollupCostData) (fee, gasUsed *big.Int)
 
-func NewRollupCostData(data []byte) (out RollupCostData) {
+func NewRollupCostData(data []byte, blobs int) (out RollupCostData) {
 	for _, b := range data {
 		if b == 0 {
 			out.zeroes++
@@ -102,6 +102,7 @@ func NewRollupCostData(data []byte) (out RollupCostData) {
 			out.ones++
 		}
 	}
+	out.blobs = uint64(blobs)
 	return out
 }
 
@@ -189,7 +190,7 @@ func newL1CostFuncBedrockHelper(l1BaseFee, overhead, scalar *big.Int, isRegolith
 // very first block of the upgrade.
 func newL1CostFuncEcotone(l1BaseFee, l1BlobBaseFee, l1BaseFeeScalar, l1BlobBaseFeeScalar *big.Int) l1CostFunc {
 	return func(costData RollupCostData) (fee, calldataGasUsed *big.Int) {
-		calldataGas := (costData.zeroes * params.TxDataZeroGas) + (costData.ones * params.TxDataNonZeroGasEIP2028)
+		calldataGas := (costData.zeroes * params.TxDataZeroGas) + (costData.ones * params.TxDataNonZeroGasEIP2028) + costData.blobs*params.BlobDAProofGas
 		calldataGasUsed = new(big.Int).SetUint64(calldataGas)
 
 		// Ecotone L1 cost function:
@@ -213,6 +214,7 @@ func newL1CostFuncEcotone(l1BaseFee, l1BlobBaseFee, l1BaseFeeScalar, l1BlobBaseF
 		fee = new(big.Int).Add(calldataCostPerByte, blobCostPerByte)
 		fee = fee.Mul(fee, calldataGasUsed)
 		fee = fee.Div(fee, ecotoneDivisor)
+		fee = fee.Add(fee, big.NewInt(int64(costData.blobs*params.BlobDAFee)))
 
 		return fee, calldataGasUsed
 	}

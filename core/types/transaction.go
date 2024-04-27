@@ -378,7 +378,7 @@ func (tx *Transaction) RollupCostData() RollupCostData {
 	if v := tx.rollupCostData.Load(); v != nil {
 		return v.(RollupCostData)
 	}
-	data, err := tx.MarshalBinary()
+	data, err := tx.WithoutBlobTxSidecar().MarshalBinary()
 	if err != nil { // Silent error, invalid txs will not be marshalled/unmarshalled for batch submission anyway.
 		log.Error("failed to encode tx for L1 cost computation", "err", err)
 	}
