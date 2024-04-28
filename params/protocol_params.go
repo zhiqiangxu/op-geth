@@ -48,7 +48,7 @@ const (
 	CallStipend           uint64 = 2300  // Free gas given at beginning of call.
 
 	BlobDAFee      = 2000 // Fee for storing blob to DA provider
-	BlobDAProofGas = 200  // Gas for storing DA proof to span batch
+	BlobDAProofGas = 200  // Gas for storing DA proof to span batch, it should be average proof size * TxDataNonZeroGasEIP2028
 
 	Keccak256Gas     uint64 = 30 // Once per KECCAK256 operation.
 	Keccak256WordGas uint64 = 6  // Once per word of the KECCAK256 operation's data.

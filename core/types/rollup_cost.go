@@ -214,7 +214,7 @@ func newL1CostFuncEcotone(l1BaseFee, l1BlobBaseFee, l1BaseFeeScalar, l1BlobBaseF
 		fee = new(big.Int).Add(calldataCostPerByte, blobCostPerByte)
 		fee = fee.Mul(fee, calldataGasUsed)
 		fee = fee.Div(fee, ecotoneDivisor)
-		fee = fee.Add(fee, big.NewInt(int64(costData.blobs*params.BlobDAFee)))
+		fee = fee.Add(fee, new(big.Int).Mul(big.NewInt(int64(costData.blobs)), big.NewInt(params.BlobDAFee)))
 
 		return fee, calldataGasUsed
 	}
