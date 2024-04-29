@@ -206,8 +206,8 @@ func ExecutableDataToBlock(params ExecutableData, versionedHashes []common.Hash,
 	for _, tx := range txs {
 		blobHashes = append(blobHashes, tx.BlobHashes()...)
 	}
-	// we only want to check versionedHashes when it's not nil
-	if versionedHashes == nil {
+	// we only want to check versionedHashes when it's not empty
+	if len(versionedHashes) == 0 {
 		versionedHashes = blobHashes
 	}
 	if len(blobHashes) != len(versionedHashes) {
