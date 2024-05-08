@@ -697,11 +697,8 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 
 		fee := new(uint256.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTipU256)
-		if st.gasFromSoul {
-			st.AddSoulBalance(st.evm.Context.Coinbase, fee.ToBig())
-		} else {
-			st.state.AddBalance(st.evm.Context.Coinbase, fee)
-		}
+		// always add to balance whether or not gasFromSoul is true
+		st.state.AddBalance(st.evm.Context.Coinbase, fee)
 	}
 
 	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
@@ -712,21 +709,15 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("optimism gas cost overflows U256: %d", gasCost)
 		}
-		if st.gasFromSoul {
-			st.AddSoulBalance(params.OptimismBaseFeeRecipient, amtU256.ToBig())
-		} else {
-			st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256)
-		}
+		// always add to balance whether or not gasFromSoul is true
+		st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256)
 		if l1Cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); l1Cost != nil {
-			if st.gasFromSoul {
-				st.AddSoulBalance(params.OptimismL1FeeRecipient, l1Cost)
-			} else {
-				amtU256, overflow = uint256.FromBig(l1Cost)
-				if overflow {
-					return nil, fmt.Errorf("optimism l1 cost overflows U256: %d", l1Cost)
-				}
-				st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256)
+			amtU256, overflow = uint256.FromBig(l1Cost)
+			if overflow {
+				return nil, fmt.Errorf("optimism l1 cost overflows U256: %d", l1Cost)
 			}
+			// always add to balance whether or not gasFromSoul is true
+			st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256)
 		}
 	}
 
