@@ -17,7 +17,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -28,7 +27,9 @@ import (
 	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 )
 
 // ExecutionResult includes all output after executing given evm
@@ -68,7 +69,7 @@ func (result *ExecutionResult) Revert() []byte {
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028 bool, isEIP3860 bool) (uint64, error) {
+func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028, isEIP3860 bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
 	if isContractCreation && isHomestead {
@@ -274,7 +275,7 @@ func getSoulBalanceData(account common.Address) []byte {
 	return data
 }
 
-func parseSoulBalanceResp(ret []byte) (*big.Int, error) {
+func parseSoulBalanceResp(ret []byte) (*uint256.Int, error) {
 	method, ok := SoulETHABI.Methods["balanceOf"]
 	if !ok {
 		panic("balanceOf method not found")
@@ -290,7 +291,11 @@ func parseSoulBalanceResp(ret []byte) (*big.Int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parseSoulBalanceResp Copy failed:%w", err)
 	}
-	return new(big.Int), nil
+	returnValueU256, overflow := uint256.FromBig(returnValue)
+	if overflow {
+		return nil, fmt.Errorf("parsed soul balance overflow:%v", returnValue)
+	}
+	return returnValueU256, nil
 }
 
 func burnSoulBalanceData(account common.Address, amount *big.Int) []byte {
@@ -335,9 +340,9 @@ var (
 	SoulMinter       = common.HexToAddress("0x02")
 )
 
-func (st *StateTransition) GetSoulBalance(account common.Address) (*big.Int, error) {
+func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int, error) {
 	// this evm call is free of gas charging
-	ret, _, vmerr := st.evm.Call(vm.AccountRef(account), types.SoulETHAddr, getSoulBalanceData(account), callSoulGasLimit, common.Big0)
+	ret, _, vmerr := st.evm.Call(vm.AccountRef(account), types.SoulETHAddr, getSoulBalanceData(account), callSoulGasLimit, common.U2560)
 	if vmerr != nil {
 		return nil, vmerr
 	}
@@ -345,13 +350,13 @@ func (st *StateTransition) GetSoulBalance(account common.Address) (*big.Int, err
 }
 
 func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.Int) (err error) {
-	_, _, err = st.evm.Call(vm.AccountRef(SoulBurner), types.SoulETHAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.Big0)
+	_, _, err = st.evm.Call(vm.AccountRef(SoulBurner), types.SoulETHAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 	return
 }
 
 func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.Int) {
 
-	_, _, err := st.evm.Call(vm.AccountRef(SoulMinter), types.SoulETHAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.Big0)
+	_, _, err := st.evm.Call(vm.AccountRef(SoulMinter), types.SoulETHAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 
 	if err != nil {
 		panic(fmt.Sprintf("mint should never fail:%v", err))
@@ -390,17 +395,22 @@ func (st *StateTransition) buyGas() error {
 		}
 	}
 
+	balanceCheckU256, overflow := uint256.FromBig(balanceCheck)
+	if overflow {
+		return fmt.Errorf("%w: address %v required balance exceeds 256 bits", ErrInsufficientFunds, st.msg.From.Hex())
+	}
+
 	st.gasFromSoul = false
 	have, err := st.GetSoulBalance(st.msg.From)
 	if err != nil {
 		return fmt.Errorf("GetSoulBalance error:%v", err)
 	}
-	if have, want := have, new(big.Int).Sub(balanceCheck, st.msg.Value); have.Cmp(want) >= 0 {
-		if have, want := st.state.GetBalance(st.msg.From), st.msg.Value; have.Cmp(want) < 0 {
+	if have, want := have.ToBig(), new(big.Int).Sub(balanceCheck, st.msg.Value); have.Cmp(want) >= 0 {
+		if have, want := st.state.GetBalance(st.msg.From).ToBig(), st.msg.Value; have.Cmp(want) < 0 {
 			return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
 		}
 		st.gasFromSoul = true
-	} else if have, want := st.state.GetBalance(st.msg.From), balanceCheck; have.Cmp(want) < 0 {
+	} else if have, want := st.state.GetBalance(st.msg.From), balanceCheckU256; have.Cmp(want) < 0 {
 		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
 	}
 	if err := st.gp.SubGas(st.msg.GasLimit); err != nil {
@@ -409,10 +419,12 @@ func (st *StateTransition) buyGas() error {
 	st.gasRemaining += st.msg.GasLimit
 
 	st.initialGas = st.msg.GasLimit
+
 	if st.gasFromSoul {
 		return st.SubSoulBalance(st.msg.From, mgval)
 	} else {
-		st.state.SubBalance(st.msg.From, mgval)
+		mgvalU256, _ := uint256.FromBig(mgval)
+		st.state.SubBalance(st.msg.From, mgvalU256)
 	}
 
 	return nil
@@ -483,13 +495,18 @@ func (st *StateTransition) preCheck() error {
 	}
 	// Check the blob version validity
 	if msg.BlobHashes != nil {
+		// The to field of a blob tx type is mandatory, and a `BlobTx` transaction internally
+		// has it as a non-nillable value, so any msg derived from blob transaction has it non-nil.
+		// However, messages created through RPC (eth_call) don't have this restriction.
+		if msg.To == nil {
+			return ErrBlobTxCreate
+		}
 		if len(msg.BlobHashes) == 0 {
-			return errors.New("blob transaction missing blob hashes")
+			return ErrMissingBlobHashes
 		}
 		for i, hash := range msg.BlobHashes {
-			if hash[0] != params.BlobTxHashVersion {
-				return fmt.Errorf("blob %d hash version mismatch (have %d, supported %d)",
-					i, hash[0], params.BlobTxHashVersion)
+			if !kzg4844.IsValidVersionedHash(hash[:]) {
+				return fmt.Errorf("blob %d has invalid hash version", i)
 			}
 		}
 	}
@@ -523,7 +540,11 @@ func (st *StateTransition) preCheck() error {
 // nil evm execution result.
 func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	if mint := st.msg.Mint; mint != nil {
-		st.state.AddBalance(st.msg.From, mint)
+		mintU256, overflow := uint256.FromBig(mint)
+		if overflow {
+			return nil, fmt.Errorf("mint value exceeds uint256: %d", mintU256)
+		}
+		st.state.AddBalance(st.msg.From, mintU256)
 	}
 	snap := st.state.Snapshot()
 
@@ -597,7 +618,11 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	st.gasRemaining -= gas
 
 	// Check clause 6
-	if msg.Value.Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From, msg.Value) {
+	value, overflow := uint256.FromBig(msg.Value)
+	if overflow {
+		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From.Hex())
+	}
+	if !value.IsZero() && !st.evm.Context.CanTransfer(st.state, msg.From, value) {
 		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From.Hex())
 	}
 
@@ -616,11 +641,11 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err
 	)
 	if contractCreation {
-		ret, _, st.gasRemaining, vmerr = st.evm.Create(sender, msg.Data, st.gasRemaining, msg.Value)
+		ret, _, st.gasRemaining, vmerr = st.evm.Create(sender, msg.Data, st.gasRemaining, value)
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From, st.state.GetNonce(sender.Address())+1)
-		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value)
+		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, value)
 	}
 
 	// if deposit: skip refunds, skip tipping coinbase
@@ -662,16 +687,18 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	if rules.IsLondon {
 		effectiveTip = cmath.BigMin(msg.GasTipCap, new(big.Int).Sub(msg.GasFeeCap, st.evm.Context.BaseFee))
 	}
+	effectiveTipU256, _ := uint256.FromBig(effectiveTip)
 
 	if st.evm.Config.NoBaseFee && msg.GasFeeCap.Sign() == 0 && msg.GasTipCap.Sign() == 0 {
 		// Skip fee payment when NoBaseFee is set and the fee fields
 		// are 0. This avoids a negative effectiveTip being applied to
 		// the coinbase when simulating calls.
 	} else {
-		fee := new(big.Int).SetUint64(st.gasUsed())
-		fee.Mul(fee, effectiveTip)
+
+		fee := new(uint256.Int).SetUint64(st.gasUsed())
+		fee.Mul(fee, effectiveTipU256)
 		if st.gasFromSoul {
-			st.AddSoulBalance(st.evm.Context.Coinbase, fee)
+			st.AddSoulBalance(st.evm.Context.Coinbase, fee.ToBig())
 		} else {
 			st.state.AddBalance(st.evm.Context.Coinbase, fee)
 		}
@@ -680,16 +707,25 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
 	// Note optimismConfig will not be nil if rules.IsOptimismBedrock is true
 	if optimismConfig := st.evm.ChainConfig().Optimism; optimismConfig != nil && rules.IsOptimismBedrock && !st.msg.IsDepositTx {
-		if st.gasFromSoul {
-			st.AddSoulBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
-		} else {
-			st.state.AddBalance(params.OptimismBaseFeeRecipient, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee))
+		gasCost := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
+		amtU256, overflow := uint256.FromBig(gasCost)
+		if overflow {
+			return nil, fmt.Errorf("optimism gas cost overflows U256: %d", gasCost)
 		}
-		if cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); cost != nil {
+		if st.gasFromSoul {
+			st.AddSoulBalance(params.OptimismBaseFeeRecipient, amtU256.ToBig())
+		} else {
+			st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256)
+		}
+		if l1Cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); l1Cost != nil {
 			if st.gasFromSoul {
-				st.AddSoulBalance(params.OptimismL1FeeRecipient, cost)
+				st.AddSoulBalance(params.OptimismL1FeeRecipient, l1Cost)
 			} else {
-				st.state.AddBalance(params.OptimismL1FeeRecipient, cost)
+				amtU256, overflow = uint256.FromBig(l1Cost)
+				if overflow {
+					return nil, fmt.Errorf("optimism l1 cost overflows U256: %d", l1Cost)
+				}
+				st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256)
 			}
 		}
 	}
@@ -711,10 +747,12 @@ func (st *StateTransition) refundGas(refundQuotient uint64) uint64 {
 	st.gasRemaining += refund
 
 	// Return ETH for remaining gas, exchanged at the original rate.
-	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gasRemaining), st.msg.GasPrice)
 	if st.gasFromSoul {
+		remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gasRemaining), st.msg.GasPrice)
 		st.AddSoulBalance(st.msg.From, remaining)
 	} else {
+		remaining := uint256.NewInt(st.gasRemaining)
+		remaining = remaining.Mul(remaining, uint256.MustFromBig(st.msg.GasPrice))
 		st.state.AddBalance(st.msg.From, remaining)
 	}
 
