@@ -336,8 +336,8 @@ func MintSoulBalanceData(account common.Address, amount *big.Int) []byte {
 
 var (
 	callSoulGasLimit = uint64(8_000_000)
-	SoulBurner       = common.HexToAddress("0x01")
-	SoulMinter       = common.HexToAddress("0x02")
+	// use hardcoded DEPOSITOR_ACCOUNT both as minter and burner
+	depositorAddress = common.HexToAddress("0xDeaDDEaDDeAdDeAdDEAdDEaddeAddEAdDEAd0001")
 )
 
 func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int, error) {
@@ -350,13 +350,13 @@ func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int,
 }
 
 func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.Int) (err error) {
-	_, _, err = st.evm.Call(vm.AccountRef(SoulBurner), types.SoulETHAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
+	_, _, err = st.evm.Call(vm.AccountRef(depositorAddress), types.SoulETHAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 	return
 }
 
 func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.Int) {
 
-	_, _, err := st.evm.Call(vm.AccountRef(SoulMinter), types.SoulETHAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
+	_, _, err := st.evm.Call(vm.AccountRef(depositorAddress), types.SoulETHAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 
 	if err != nil {
 		panic(fmt.Sprintf("mint should never fail:%v", err))
