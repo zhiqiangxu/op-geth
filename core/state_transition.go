@@ -342,7 +342,7 @@ var (
 
 func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int, error) {
 	// this evm call is free of gas charging
-	ret, _, vmerr := st.evm.Call(vm.AccountRef(account), types.SoulETHAddr, getSoulBalanceData(account), callSoulGasLimit, common.U2560)
+	ret, _, vmerr := st.evm.Call(vm.AccountRef(account), types.SoulGasTokenAddr, getSoulBalanceData(account), callSoulGasLimit, common.U2560)
 	if vmerr != nil {
 		return nil, vmerr
 	}
@@ -350,13 +350,13 @@ func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int,
 }
 
 func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.Int) (err error) {
-	_, _, err = st.evm.Call(vm.AccountRef(depositorAddress), types.SoulETHAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
+	_, _, err = st.evm.Call(vm.AccountRef(depositorAddress), types.SoulGasTokenAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 	return
 }
 
 func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.Int) {
 
-	_, _, err := st.evm.Call(vm.AccountRef(depositorAddress), types.SoulETHAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
+	_, _, err := st.evm.Call(vm.AccountRef(depositorAddress), types.SoulGasTokenAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 
 	if err != nil {
 		panic(fmt.Sprintf("mint should never fail:%v", err))
