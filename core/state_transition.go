@@ -351,6 +351,9 @@ func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int,
 
 func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.Int) (err error) {
 	_, _, err = st.evm.Call(vm.AccountRef(depositorAddress), types.SoulGasTokenAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
+	if err == nil {
+		st.state.SubBalance(types.SoulGasTokenAddr, uint256.MustFromBig(amount))
+	}
 	return
 }
 
@@ -361,6 +364,7 @@ func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.In
 	if err != nil {
 		panic(fmt.Sprintf("mint should never fail:%v", err))
 	}
+	st.state.AddBalance(types.SoulGasTokenAddr, uint256.MustFromBig(amount))
 }
 
 func (st *StateTransition) buyGas() error {
