@@ -245,11 +245,11 @@ func (st *StateTransition) to() common.Address {
 	return *st.msg.To
 }
 
-var SoulETHABI abi.ABI
+var SoulGasTokenABI abi.ABI
 
 func init() {
 	var err error
-	SoulETHABI, err = util.ParseFunctionsAsABI([]string{
+	SoulGasTokenABI, err = util.ParseFunctionsAsABI([]string{
 		"function balanceOf(address account) returns (uint256)",
 		"function burnFrom(address account, uint256 value)",
 		"function batchMint(address[] accounts, uint256[] values)"})
@@ -259,7 +259,7 @@ func init() {
 }
 
 func getSoulBalanceData(account common.Address) []byte {
-	method, ok := SoulETHABI.Methods["balanceOf"]
+	method, ok := SoulGasTokenABI.Methods["balanceOf"]
 	if !ok {
 		panic("balanceOf method not found")
 	}
@@ -276,7 +276,7 @@ func getSoulBalanceData(account common.Address) []byte {
 }
 
 func parseSoulBalanceResp(ret []byte) (*uint256.Int, error) {
-	method, ok := SoulETHABI.Methods["balanceOf"]
+	method, ok := SoulGasTokenABI.Methods["balanceOf"]
 	if !ok {
 		panic("balanceOf method not found")
 	}
@@ -300,7 +300,7 @@ func parseSoulBalanceResp(ret []byte) (*uint256.Int, error) {
 
 func burnSoulBalanceData(account common.Address, amount *big.Int) []byte {
 
-	method, ok := SoulETHABI.Methods["burnFrom"]
+	method, ok := SoulGasTokenABI.Methods["burnFrom"]
 	if !ok {
 		panic("burnFrom method not found")
 	}
@@ -318,7 +318,7 @@ func burnSoulBalanceData(account common.Address, amount *big.Int) []byte {
 
 // MintSoulBalanceData is exported for reusing in op_geth_test.go
 func MintSoulBalanceData(account common.Address, amount *big.Int) []byte {
-	method, ok := SoulETHABI.Methods["batchMint"]
+	method, ok := SoulGasTokenABI.Methods["batchMint"]
 	if !ok {
 		panic("batchMint method not found")
 	}
