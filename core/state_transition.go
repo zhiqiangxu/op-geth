@@ -250,6 +250,7 @@ var SoulGasTokenABI abi.ABI
 func init() {
 	var err error
 	SoulGasTokenABI, err = util.ParseFunctionsAsABI([]string{
+		"function deposit()", // used by op_geth_test.go
 		"function balanceOf(address account) returns (uint256)",
 		"function burnFrom(address account, uint256 value)",
 		"function batchMint(address[] accounts, uint256[] values)"})
@@ -316,8 +317,7 @@ func burnSoulBalanceData(account common.Address, amount *big.Int) []byte {
 	return data
 }
 
-// MintSoulBalanceData is exported for reusing in op_geth_test.go
-func MintSoulBalanceData(account common.Address, amount *big.Int) []byte {
+func mintSoulBalanceData(account common.Address, amount *big.Int) []byte {
 	method, ok := SoulGasTokenABI.Methods["batchMint"]
 	if !ok {
 		panic("batchMint method not found")
@@ -359,7 +359,7 @@ func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.In
 
 func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.Int) {
 
-	_, _, err := st.evm.Call(vm.AccountRef(depositorAddress), types.SoulGasTokenAddr, MintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
+	_, _, err := st.evm.Call(vm.AccountRef(depositorAddress), types.SoulGasTokenAddr, mintSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 
 	if err != nil {
 		panic(fmt.Sprintf("mint should never fail:%v", err))
