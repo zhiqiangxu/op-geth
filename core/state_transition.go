@@ -251,7 +251,7 @@ func init() {
 	var err error
 	SoulGasTokenABI, err = util.ParseFunctionsAsABI([]string{
 		"function deposit()", // used by op_geth_test.go
-		"function balanceOf(address account) returns (uint256)",
+		"function balanceOf(address account) returns (uint256 balance)",
 		"function burnFrom(address account, uint256 value)",
 		"function batchMint(address[] accounts, uint256[] values)"})
 	if err != nil {
@@ -288,7 +288,7 @@ func parseSoulBalanceResp(ret []byte) (*uint256.Int, error) {
 	}
 
 	returnValue := new(big.Int)
-	err = method.Outputs.Copy(returnValue, returnValueInterface)
+	err = method.Outputs.Copy(&returnValue, returnValueInterface)
 	if err != nil {
 		return nil, fmt.Errorf("parseSoulBalanceResp Copy failed:%w", err)
 	}
