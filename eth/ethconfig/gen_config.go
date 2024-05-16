@@ -61,6 +61,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		OverrideOptimismFjord                   *uint64 `toml:",omitempty"`
 		OverrideOptimismInterop                 *uint64 `toml:",omitempty"`
 		ApplySuperchainUpgrades                 bool    `toml:",omitempty"`
+		EnableSoulGasToken                      bool    `toml:",omitempty"`
+		IsSoulBackedByNative                    bool    `toml:",omitempty"`
 		RollupSequencerHTTP                     string
 		RollupHistoricalRPC                     string
 		RollupHistoricalRPCTimeout              time.Duration
@@ -113,6 +115,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.OverrideOptimismFjord = c.OverrideOptimismFjord
 	enc.OverrideOptimismInterop = c.OverrideOptimismInterop
 	enc.ApplySuperchainUpgrades = c.ApplySuperchainUpgrades
+	enc.EnableSoulGasToken = c.EnableSoulGasToken
+	enc.IsSoulBackedByNative = c.IsSoulBackedByNative
 	enc.RollupSequencerHTTP = c.RollupSequencerHTTP
 	enc.RollupHistoricalRPC = c.RollupHistoricalRPC
 	enc.RollupHistoricalRPCTimeout = c.RollupHistoricalRPCTimeout
@@ -169,6 +173,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		OverrideOptimismFjord                   *uint64 `toml:",omitempty"`
 		OverrideOptimismInterop                 *uint64 `toml:",omitempty"`
 		ApplySuperchainUpgrades                 *bool   `toml:",omitempty"`
+		EnableSoulGasToken                      *bool   `toml:",omitempty"`
+		IsSoulBackedByNative                    *bool   `toml:",omitempty"`
 		RollupSequencerHTTP                     *string
 		RollupHistoricalRPC                     *string
 		RollupHistoricalRPCTimeout              *time.Duration
@@ -311,6 +317,12 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.ApplySuperchainUpgrades != nil {
 		c.ApplySuperchainUpgrades = *dec.ApplySuperchainUpgrades
+	}
+	if dec.EnableSoulGasToken != nil {
+		c.EnableSoulGasToken = *dec.EnableSoulGasToken
+	}
+	if dec.IsSoulBackedByNative != nil {
+		c.IsSoulBackedByNative = *dec.IsSoulBackedByNative
 	}
 	if dec.RollupSequencerHTTP != nil {
 		c.RollupSequencerHTTP = *dec.RollupSequencerHTTP

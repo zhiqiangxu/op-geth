@@ -352,7 +352,9 @@ func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int,
 func (st *StateTransition) SubSoulBalance(account common.Address, amount *big.Int) (err error) {
 	_, _, err = st.evm.Call(vm.AccountRef(depositorAddress), types.SoulGasTokenAddr, burnSoulBalanceData(account, amount), callSoulGasLimit, common.U2560)
 	if err == nil {
-		st.state.SubBalance(types.SoulGasTokenAddr, uint256.MustFromBig(amount))
+		if st.evm.ChainConfig().IsOptimism() && st.evm.ChainConfig().Optimism.IsSoulBackedByNative {
+			st.state.SubBalance(types.SoulGasTokenAddr, uint256.MustFromBig(amount))
+		}
 	}
 	return
 }
@@ -364,7 +366,10 @@ func (st *StateTransition) AddSoulBalance(account common.Address, amount *big.In
 	if err != nil {
 		panic(fmt.Sprintf("mint should never fail:%v", err))
 	}
-	st.state.AddBalance(types.SoulGasTokenAddr, uint256.MustFromBig(amount))
+
+	if st.evm.ChainConfig().IsOptimism() && st.evm.ChainConfig().Optimism.IsSoulBackedByNative {
+		st.state.AddBalance(types.SoulGasTokenAddr, uint256.MustFromBig(amount))
+	}
 }
 
 func (st *StateTransition) buyGas() error {
@@ -405,17 +410,22 @@ func (st *StateTransition) buyGas() error {
 	}
 
 	st.gasFromSoul = false
-	have, err := st.GetSoulBalance(st.msg.From)
-	if err != nil {
-		return fmt.Errorf("GetSoulBalance error:%v", err)
+	if st.evm.ChainConfig().IsOptimism() && st.evm.ChainConfig().Optimism.EnableSoulGasToken {
+		have, err := st.GetSoulBalance(st.msg.From)
+		if err != nil {
+			return fmt.Errorf("GetSoulBalance error:%v", err)
+		}
+		if have, want := have.ToBig(), new(big.Int).Sub(balanceCheck, st.msg.Value); have.Cmp(want) >= 0 {
+			if have, want := st.state.GetBalance(st.msg.From).ToBig(), st.msg.Value; have.Cmp(want) < 0 {
+				return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
+			}
+			st.gasFromSoul = true
+		}
 	}
-	if have, want := have.ToBig(), new(big.Int).Sub(balanceCheck, st.msg.Value); have.Cmp(want) >= 0 {
-		if have, want := st.state.GetBalance(st.msg.From).ToBig(), st.msg.Value; have.Cmp(want) < 0 {
+	if !st.gasFromSoul {
+		if have, want := st.state.GetBalance(st.msg.From), balanceCheckU256; have.Cmp(want) < 0 {
 			return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
 		}
-		st.gasFromSoul = true
-	} else if have, want := st.state.GetBalance(st.msg.From), balanceCheckU256; have.Cmp(want) < 0 {
-		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From.Hex(), have, want)
 	}
 	if err := st.gp.SubGas(st.msg.GasLimit); err != nil {
 		return err
@@ -701,8 +711,12 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 
 		fee := new(uint256.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTipU256)
-		// always add to balance whether or not gasFromSoul is true
-		st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		// we burn the token if gas is from SoulGasToken which is not backed by native;
+		// otherwise we add to the native balance
+		if st.gasFromSoul && st.evm.ChainConfig().IsOptimism() && !st.evm.ChainConfig().Optimism.IsSoulBackedByNative {
+		} else {
+			st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		}
 	}
 
 	// Check that we are post bedrock to enable op-geth to be able to create pseudo pre-bedrock blocks (these are pre-bedrock, but don't follow l2 geth rules)
@@ -713,15 +727,23 @@ func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
 		if overflow {
 			return nil, fmt.Errorf("optimism gas cost overflows U256: %d", gasCost)
 		}
-		// always add to balance whether or not gasFromSoul is true
-		st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256)
+		// we burn the token if gas is from SoulGasToken which is not backed by native;
+		// otherwise we add to the native balance
+		if st.gasFromSoul && st.evm.ChainConfig().IsOptimism() && !st.evm.ChainConfig().Optimism.IsSoulBackedByNative {
+		} else {
+			st.state.AddBalance(params.OptimismBaseFeeRecipient, amtU256)
+		}
 		if l1Cost := st.evm.Context.L1CostFunc(st.msg.RollupCostData, st.evm.Context.Time); l1Cost != nil {
 			amtU256, overflow = uint256.FromBig(l1Cost)
 			if overflow {
 				return nil, fmt.Errorf("optimism l1 cost overflows U256: %d", l1Cost)
 			}
-			// always add to balance whether or not gasFromSoul is true
-			st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256)
+			// we burn the token if gas is from SoulGasToken which is not backed by native;
+			// otherwise we add to the native balance
+			if st.gasFromSoul && st.evm.ChainConfig().IsOptimism() && !st.evm.ChainConfig().Optimism.IsSoulBackedByNative {
+			} else {
+				st.state.AddBalance(params.OptimismL1FeeRecipient, amtU256)
+			}
 		}
 	}
 

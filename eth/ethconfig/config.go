@@ -172,6 +172,11 @@ type Config struct {
 	// ApplySuperchainUpgrades requests the node to load chain-configuration from the superchain-registry.
 	ApplySuperchainUpgrades bool `toml:",omitempty"`
 
+	// Enable using SoulGasToken for gas fee.
+	EnableSoulGasToken bool `toml:",omitempty"`
+	// Whether SoulGasToken is backed by native token or minted by whitelisted miners, only effective when EnableSoulGasToken is true
+	IsSoulBackedByNative bool `toml:",omitempty"`
+
 	RollupSequencerHTTP                     string
 	RollupHistoricalRPC                     string
 	RollupHistoricalRPCTimeout              time.Duration

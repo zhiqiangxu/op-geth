@@ -439,6 +439,10 @@ type OptimismConfig struct {
 	EIP1559Elasticity        uint64 `json:"eip1559Elasticity"`
 	EIP1559Denominator       uint64 `json:"eip1559Denominator"`
 	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+	// Enable using SoulGasToken for gas fee.
+	EnableSoulGasToken bool `json:"enableSoulGasToken"`
+	// Whether SoulGasToken is backed by native token or minted by whitelisted miners, only effective when EnableSoulGasToken is true
+	IsSoulBackedByNative bool
 }
 
 // String implements the stringer interface, returning the optimism fee config details.
