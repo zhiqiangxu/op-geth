@@ -442,7 +442,7 @@ type OptimismConfig struct {
 	// Enable using SoulGasToken for gas fee.
 	EnableSoulGasToken bool `json:"enableSoulGasToken"`
 	// Whether SoulGasToken is backed by native token or minted by whitelisted miners, only effective when EnableSoulGasToken is true
-	IsSoulBackedByNative bool
+	IsSoulBackedByNative bool `json:"isSoulBackedByNative"`
 }
 
 // String implements the stringer interface, returning the optimism fee config details.

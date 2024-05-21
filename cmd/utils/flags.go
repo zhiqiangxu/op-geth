@@ -908,16 +908,6 @@ var (
 		Category: flags.RollupCategory,
 		Value:    true,
 	}
-	EnableSoulGasToken = &cli.BoolFlag{
-		Name:     "soulgastoken",
-		Usage:    "Enable using SoulGasToken for gas fee.",
-		Category: flags.EthCategory,
-	}
-	IsSoulBackedByNative = &cli.BoolFlag{
-		Name:     "backedbynative",
-		Usage:    "Whether SoulGasToken is backed by native token or minted by whitelisted miners, only effective when EnableSoulGasToken is true.",
-		Category: flags.EthCategory,
-	}
 
 	// Metrics flags
 	MetricsEnabledFlag = &cli.BoolFlag{
@@ -1876,8 +1866,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
 	cfg.RollupHaltOnIncompatibleProtocolVersion = ctx.String(RollupHaltOnIncompatibleProtocolVersionFlag.Name)
 	cfg.ApplySuperchainUpgrades = ctx.Bool(RollupSuperchainUpgradesFlag.Name)
-	cfg.EnableSoulGasToken = ctx.Bool(EnableSoulGasToken.Name)
-	cfg.IsSoulBackedByNative = ctx.Bool(IsSoulBackedByNative.Name)
 	// Override any default configs for hard coded networks.
 	switch {
 	case ctx.Bool(MainnetFlag.Name):

@@ -227,10 +227,6 @@ type ChainOverrides struct {
 	OverrideOptimismFjord   *uint64
 	ApplySuperchainUpgrades bool
 	OverrideOptimismInterop *uint64
-	// Enable using SoulGasToken for gas fee.
-	EnableSoulGasToken bool
-	// Whether SoulGasToken is backed by native token or minted by whitelisted miners, only effective when EnableSoulGasToken is true
-	IsSoulBackedByNative bool
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -299,10 +295,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 			}
 			if overrides != nil && overrides.OverrideOptimismInterop != nil {
 				config.InteropTime = overrides.OverrideOptimismInterop
-			}
-			if overrides != nil && config.IsOptimism() {
-				config.Optimism.EnableSoulGasToken = overrides.EnableSoulGasToken
-				config.Optimism.IsSoulBackedByNative = overrides.IsSoulBackedByNative
 			}
 		}
 	}
