@@ -342,7 +342,7 @@ var (
 
 func (st *StateTransition) GetSoulBalance(account common.Address) (*uint256.Int, error) {
 	// this evm call is free of gas charging
-	ret, _, vmerr := st.evm.Call(vm.AccountRef(account), types.SoulGasTokenAddr, getSoulBalanceData(account), callSoulGasLimit, common.U2560)
+	ret, _, vmerr := st.evm.StaticCall(vm.AccountRef(account), types.SoulGasTokenAddr, getSoulBalanceData(account), callSoulGasLimit)
 	if vmerr != nil {
 		return nil, vmerr
 	}
