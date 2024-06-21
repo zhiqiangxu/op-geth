@@ -110,7 +110,7 @@ func newPayload(empty *types.Block, id engine.PayloadID) *Payload {
 
 		interrupt: new(atomic.Int32),
 	}
-	log.Info("Starting work on payload", "id", payload.id)
+	log.Info("Starting work on payload", "id", payload.id, "empty", empty != nil)
 	payload.cond = sync.NewCond(&payload.lock)
 	return payload
 }
